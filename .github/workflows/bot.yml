@@ -2,35 +2,57 @@ name: Minecraft Bot - kevin911
 
 on:
   workflow_dispatch: # Manual trigger
-  push:
-    branches:
-      - main
-  schedule:
-    # Run every 6 hours (optional - remove if not needed)
-    - cron: '0 */6 * * *'
+  
+  # Optional: Uncomment to run on schedule
+  # schedule:
+  #   - cron: '0 */12 * * *' # Every 12 hours
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     
+    # Timeout after 6 hours
+    timeout-minutes: 360
+    
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@v4
+      
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
-
+          cache: 'npm'
+      
       - name: Install dependencies
-        run: npm install
-
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install mineflayer@4.20.1
+          echo "✅ Dependencies installed"
+      
+      - name: Display bot info
+        run: |
+          echo "🤖 Minecraft Bot Configuration"
+          echo "================================"
+          echo "Bot Username: kevin911"
+          echo "Server: Ultimis.net"
+          echo "Version: 1.12.2"
+          echo "Trigger Player: SIGMAxox"
+          echo "================================"
+          echo ""
+      
       - name: Run Minecraft Bot
         run: |
-          echo "Starting Minecraft Bot..."
+          echo "🚀 Starting Minecraft Bot..."
           node bot.js
-        timeout-minutes: 360 # Bot will run for 6 hours max
-
+        continue-on-error: true
+      
       - name: Bot finished
         if: always()
-        run: echo "Bot execution completed or timed out"
+        run: |
+          echo "🏁 Bot execution completed"
+          echo "Check logs above for details"
+          echo "If bot failed, check for:"
+          echo "  - VPN/Proxy detection"
+          echo "  - Rate limiting"
+          echo "  - Authentication issues"
