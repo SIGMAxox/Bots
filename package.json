@@ -1,19 +1,24 @@
 {
   "name": "minecraft-bot-kevin911",
-  "version": "1.0.0",
-  "description": "Minecraft bot for Ultimis server",
+  "version": "2.0.0",
+  "description": "Minecraft bot for Ultimis.net server with auto-join and TPA features",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "test": "echo \"No tests yet\" && exit 0"
   },
   "keywords": [
     "minecraft",
     "bot",
-    "mineflayer"
+    "mineflayer",
+    "automation"
   ],
-  "author": "",
+  "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "mineflayer": "^4.20.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
