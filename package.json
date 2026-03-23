@@ -1,0 +1,19 @@
+{
+  "name": "minecraft-bot-kevin911",
+  "version": "1.0.0",
+  "description": "Minecraft bot for Ultimis server",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "keywords": [
+    "minecraft",
+    "bot",
+    "mineflayer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "mineflayer": "^4.20.1"
+  }
+}
