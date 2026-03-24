@@ -23,15 +23,16 @@ jobs:
           sudo apt-get install -y openvpn curl
           echo "✅ OpenVPN installed"
 
-      # ==================== تجهيز ملف VPN ====================
-      - name: Setup VPN config
+      # ==================== التحقق من ملف VPN ====================
+      - name: Check VPN config
         run: |
-          # نسخ ملف VPN من الريبو
           if [ -f "vpn.ovpn" ]; then
-            cp vpn.ovpn vpn.ovpn
-            echo "✅ VPN config found"
+            echo "✅ VPN config found: vpn.ovpn"
+            echo "File size: $(wc -l < vpn.ovpn) lines"
           else
-            echo "❌ VPN config not found!"
+            echo "❌ vpn.ovpn not found!"
+            echo "Files in directory:"
+            ls -la
             exit 1
           fi
 
@@ -43,40 +44,36 @@ jobs:
           # تشغيل VPN في الخلفية
           sudo openvpn --config vpn.ovpn --daemon --log vpn.log --writepid vpn.pid
           
-          # انتظر 10 ثواني بالضبط
-          echo "⏳ Waiting exactly 10 seconds for VPN to connect..."
+          # انتظر 10 ثواني
+          echo "⏳ Waiting 10 seconds for VPN connection..."
           sleep 10
           
           # فحص الاتصال
-          echo "🔍 Checking VPN connection..."
+          echo "🔍 Checking connection..."
           
-          # جرب تشوف IP
-          VPN_IP=$(curl -s --max-time 5 https://api.ipify.org || echo "failed")
+          # جرب نشوف الIP
+          IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || echo "failed")
           
-          if [ "$VPN_IP" != "failed" ]; then
-            echo "✅ VPN CONNECTED SUCCESSFULLY!"
-            echo "📡 Current IP: $VPN_IP"
-            echo "✅ STEP COMPLETE - Moving to next step..."
+          if [ "$IP" != "failed" ]; then
+            echo "✅ VPN CONNECTED!"
+            echo "📡 Current IP: $IP"
           else
-            echo "⚠️ VPN might not be ready, but continuing anyway..."
-            echo "📡 Will try to connect without VPN check"
+            echo "⚠️ Could not get IP, but continuing..."
           fi
           
-          # نخرج بنجاح عشان نكمل للخطوة اللي بعدها
-          exit 0
+          echo "✅ VPN step completed"
 
       # ==================== تثبيت dependencies ====================
-      - name: Install Bot Dependencies
+      - name: Install dependencies
         run: |
-          echo "📦 Installing dependencies..."
+          echo "📦 Installing mineflayer..."
           npm install mineflayer
           echo "✅ Dependencies installed"
 
       # ==================== تشغيل البوت ====================
-      - name: Run Minecraft Bot
+      - name: Run Bot
         run: |
-          echo "🚀 STARTING BOT..."
-          echo "Current time: $(date)"
+          echo "🚀 Starting bot..."
           echo "Current IP: $(curl -s https://api.ipify.org)"
           echo "================================"
           node bot.js
@@ -86,6 +83,5 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          echo "🧹 Cleaning up..."
           sudo killall openvpn 2>/dev/null || true
-          echo "✅ Done"
+          echo "✅ Cleanup done"
