@@ -9,33 +9,41 @@ const PROXY = {
     pass: 'jajcwxcjzxa7'
 };
 
-const proxyUrl = `socks5://${PROXY.user}:${PROXY.pass}@${PROXY.host}:${PROXY.port}`;
-const agent = new SocksProxyAgent(proxyUrl);
-
-console.log('✅ Proxy ready:', PROXY.host + ':' + PROXY.port);
+let agent = null;
+try {
+    const proxyUrl = `socks5://${PROXY.user}:${PROXY.pass}@${PROXY.host}:${PROXY.port}`;
+    agent = new SocksProxyAgent(proxyUrl);
+    console.log('✅ Proxy ready:', PROXY.host + ':' + PROXY.port);
+} catch (err) {
+    console.log('❌ Proxy error:', err.message);
+}
 
 // ==================== CONFIG ====================
 const TRIGGER_PLAYERS = ['SIGMAxox', 'soonk'];
 const TRIGGER_MESSAGE = '7anafe';
+const PASSWORD = 'asdfghjkl1';
 
 // ==================== BOT CONFIG ====================
-const bot = mineflayer.createBot({
+const botConfig = {
     host: 'Ultimis.net',
     port: 25565,
     username: 'kevin911',
     version: '1.12.2',
     auth: 'offline',
-    agent: agent,
     viewDistance: 'tiny',
     checkTimeoutInterval: 60000,
-    hideErrors: true,
-    loadChunks: false,
-    chunkLoadRadius: 0
-});
+    hideErrors: true
+};
 
-let loginSent = false;
+if (agent) {
+    botConfig.agent = agent;
+}
+
+const bot = mineflayer.createBot(botConfig);
+
 let stepsDone = false;
-let triggerCooldown = false; // منع التكرار السريع
+let triggerCooldown = false;
+let authenticated = false;
 
 // تجاهل رسائل الـ chunk errors
 const originalConsoleLog = console.log;
@@ -48,6 +56,22 @@ console.log = function(...args) {
 
 // ==================== FUNCTIONS ====================
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// كتابة كلمة السر فوراً
+function sendLogin() {
+    if (!authenticated) {
+        console.log('🔑 Sending login immediately...');
+        bot.chat(`/login ${PASSWORD}`);
+    }
+}
+
+function sendRegister() {
+    console.log('📝 Registering...');
+    bot.chat(`/register ${PASSWORD} ${PASSWORD}`);
+    setTimeout(() => {
+        bot.chat(`/login ${PASSWORD}`);
+    }, 1000);
+}
 
 // الحركة
 async function move() {
@@ -146,7 +170,6 @@ async function sendTPA(playerName) {
         console.log(`❌ Failed to send TPA: ${err.message}`);
     }
     
-    // كول داون 15 ثانية عشان ما يكررش
     setTimeout(() => {
         triggerCooldown = false;
     }, 15000);
@@ -157,8 +180,6 @@ async function doAllSteps() {
     if (stepsDone) return;
     
     console.log('\n🎬 Starting steps...\n');
-    
-    await wait(2000);
     
     await move();
     await wait(1000);
@@ -185,11 +206,9 @@ async function doAllSteps() {
 
 // ==================== CHECK TRIGGER ====================
 function checkTrigger(message, sender) {
-    // لو الرسالة فيها الكلمة المطلوبة
-    if (message.includes(TRIGGER_MESSAGE)) {
-        // وشوف مين اللي بعت
+    if (message && message.includes(TRIGGER_MESSAGE)) {
         for (const player of TRIGGER_PLAYERS) {
-            if (sender.includes(player)) {
+            if (sender && sender.includes(player)) {
                 console.log(`\n🔔 Detected "${TRIGGER_MESSAGE}" from ${player}!`);
                 sendTPA(player);
                 return true;
@@ -205,37 +224,27 @@ bot.on('login', () => {
     console.log('✅ Connected');
 });
 
-bot.on('spawn', () => {
+bot.once('spawn', () => {
     console.log('✅ Spawned');
-    
-    if (!loginSent) {
-        loginSent = true;
-        setTimeout(() => {
-            console.log('🔑 Logging in...');
-            bot.chat('/login asdfghjkl1');
-        }, 2000);
-    }
+    // بعد السباون مباشرة نرسل كلمة السر
+    sendLogin();
 });
 
 bot.on('message', (msg) => {
     const text = msg.toString();
-    const json = msg.json || {};
     
-    // استخراج اسم المرسل لو موجود
+    // استخراج اسم المرسل
     let sender = '';
-    if (json.extra && json.extra[0] && json.extra[0].clickEvent) {
-        // بعض التنسيقات
-        sender = json.extra[0].text || '';
-    } else if (text.includes('<')) {
-        // تنسيق عادي: <username> message
-        const match = text.match(/<([^>]+)>/);
-        if (match) sender = match[1];
+    const match = text.match(/<([^>]+)>/);
+    if (match) {
+        sender = match[1];
     }
     
     // فلترة الرسائل
     if (!text.includes('VOTE') && 
         !text.includes('Discord') && 
         !text.includes('Support') &&
+        !text.includes('vote') &&
         text.length < 100) {
         console.log('💬', text);
     }
@@ -243,19 +252,27 @@ bot.on('message', (msg) => {
     // التحقق من الـ Trigger
     checkTrigger(text, sender);
     
-    // تسجيل الدخول
-    if (text.includes('register')) {
-        bot.chat('/register asdfghjkl1 asdfghjkl1');
+    // لو طلب تسجيل
+    if (text.includes('register') && text.includes('password')) {
+        sendRegister();
     }
     
-    if (text.includes('Successfully logged in')) {
-        console.log('✅ Logged in! Starting...');
+    // لو طلب دخول (ونحن ما دخلناش)
+    if (text.includes('login') && text.includes('password') && !authenticated) {
+        sendLogin();
+    }
+    
+    // لو دخلنا بنجاح
+    if (text.includes('Successfully logged in') || text.includes('Logged in')) {
+        authenticated = true;
+        console.log('✅ Logged in!');
         doAllSteps();
     }
 });
 
 bot.on('kicked', (reason) => {
-    console.log('❌ Kicked:', reason);
+    const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
+    console.log('❌ Kicked:', reasonText);
 });
 
 bot.on('error', (err) => {
@@ -267,6 +284,4 @@ bot.on('error', (err) => {
 console.log('🚀 Starting bot...');
 console.log('📡 Server: Ultimis.net');
 console.log('🤖 Bot: kevin911');
-console.log('⚡ Mode: Lightweight');
 console.log('🎯 Trigger: "7anafe" from SIGMAxox or soonk');
-console.log('💬 Bot will send /tpa <player> when triggered');
