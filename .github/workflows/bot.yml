@@ -1,267 +1,307 @@
-name: Minecraft Bot - kevin911 (Stealth Mode)
+name: Minecraft Bot - Stealth Mode with Proxy
 
 on:
-  workflow_dispatch: # Manual trigger
-  
-  # Optional: Uncomment to run on schedule
-  # schedule:
-  #   - cron: '0 */12 * * *' # Every 12 hours
+  workflow_dispatch: # Manual trigger only (no schedule to avoid detection)
+    inputs:
+      use_proxy:
+        description: 'Use proxy?'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     
-    # Timeout after 6 hours
-    timeout-minutes: 360
-    
-    # Use different runners randomly to avoid pattern detection
-    strategy:
-      fail-fast: false
-      matrix:
-        # Randomize runner selection
-        runner: [ubuntu-latest]
+    # Timeout after 2 hours
+    timeout-minutes: 120
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      # ==================== IP & LOCATION SPOOFING ====================
-      
-      - name: Randomize system identity
-        run: |
-          echo "🕵️ Setting up stealth environment..."
-          
-          # Generate random hostname
-          sudo hostnamectl set-hostname "user-$(shuf -i 1000-9999 -n 1)-$(shuf -i 1-999 -n 1)"
-          
-          # Random timezone to look like different locations
-          TIMEZONES=("America/New_York" "America/Los_Angeles" "Europe/London" "Europe/Berlin" "Asia/Tokyo" "Australia/Sydney" "America/Sao_Paulo")
-          RANDOM_TZ=${TIMEZONES[$RANDOM % ${#TIMEZONES[@]}]}
-          sudo timedatectl set-timezone $RANDOM_TZ
-          echo "Timezone set to: $(date +%Z)"
-          
-          # Random system language
-          export LANG="en_US.UTF-8"
-          echo "System language: $LANG"
-          
-      - name: Configure network optimizations
-        run: |
-          echo "🌐 Optimizing network settings for stable ping..."
-          
-          # TCP optimizations for better ping
-          sudo sysctl -w net.ipv4.tcp_congestion_control=bbr > /dev/null 2>&1 || true
-          sudo sysctl -w net.core.default_qdisc=fq > /dev/null 2>&1 || true
-          sudo sysctl -w net.ipv4.tcp_slow_start_after_idle=0 > /dev/null 2>&1 || true
-          sudo sysctl -w net.ipv4.tcp_notsent_lowat=16384 > /dev/null 2>&1 || true
-          
-          # Disable IPv6 to force IPv4 (more stable)
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1 > /dev/null 2>&1 || true
-          
-          echo "✅ Network optimizations applied"
-      
-      - name: Setup proxy/VPN (Optional - if you have proxy)
-        run: |
-          echo "🔒 Proxy configuration (if available)"
-          # Note: GitHub Actions doesn't support external proxies by default
-          # You would need to add proxy credentials as secrets
-          
-          # Example proxy setup (uncomment and add secrets if you have a proxy):
-          # if [ -n "${{ secrets.PROXY_URL }}" ]; then
-          #   export HTTP_PROXY="${{ secrets.PROXY_URL }}"
-          #   export HTTPS_PROXY="${{ secrets.PROXY_URL }}"
-          #   echo "✅ Proxy configured"
-          # else
-          #   echo "⚠️ No proxy configured - using GitHub's native IP"
-          # fi
-          
-          echo "⚠️ Note: GitHub Actions use GitHub's IP ranges"
-          echo "   To hide IP, consider using external VPS instead"
-      
-      # ==================== PING OPTIMIZATION ====================
-      
-      - name: Test and optimize ping
-        run: |
-          echo "📡 Testing connection to Ultimis.net..."
-          
-          # Measure initial ping
-          PING_RESULT=$(ping -c 4 Ultimis.net 2>/dev/null | tail -1 | awk '{print $4}' | cut -d '/' -f 2)
-          if [ -n "$PING_RESULT" ]; then
-            echo "   Average ping: ${PING_RESULT}ms"
-          else
-            echo "   ⚠️ Could not measure ping"
-          fi
-          
-          # Find best DNS servers
-          echo "   Optimizing DNS..."
-          echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf > /dev/null
-          echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf > /dev/null
-          
-          echo "✅ Network testing complete"
-      
-      # ==================== DEPENDENCIES ====================
-      
-      - name: Setup Node.js with optimizations
+      # ==================== SETUP NODE ====================
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           
+      # ==================== CACHE DEPENDENCIES ====================
       - name: Cache node modules
         uses: actions/cache@v3
         with:
-          path: node_modules
+          path: |
+            node_modules
+            ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
+            ${{ runner.os }}-
       
-      - name: Install dependencies with optimizations
+      # ==================== INSTALL DEPENDENCIES ====================
+      - name: Install dependencies
         run: |
-          echo "📦 Installing dependencies with optimizations..."
+          echo "📦 Installing required packages..."
           
-          # Install with specific flags for stability
-          npm install --no-fund --no-audit --prefer-offline
+          # Create package.json if it doesn't exist
+          if [ ! -f package.json ]; then
+            echo '{
+              "name": "minecraft-bot",
+              "version": "1.0.0",
+              "dependencies": {
+                "mineflayer": "^4.14.0",
+                "socks-proxy-agent": "^8.0.2"
+              }
+            }' > package.json
+          fi
           
-          # Install additional packages for better performance
-          npm install mineflayer minecraft-protocol
+          # Install dependencies
+          npm install
           
-          echo "✅ Dependencies installed"
-          
-      - name: Create optimized bot configuration
+          echo "✅ Dependencies installed:"
+          npm list --depth=0
+      
+      # ==================== VERIFY INSTALLATION ====================
+      - name: Verify dependencies
         run: |
-          cat > bot-config.json << 'EOF'
-          {
-            "network": {
-              "enableLatencyOptimization": true,
-              "preferIPv4": true,
-              "tcpKeepAlive": true,
-              "tcpNoDelay": true
-            },
-            "ping": {
-              "simulateRealisticPing": true,
-              "basePing": 40,
-              "pingVariation": 15,
-              "jitterAmount": 5
-            },
-            "stealth": {
-              "randomizePackets": true,
-              "humanizeDelays": true,
-              "spoofClientBrand": true
-            }
+          echo "🔍 Verifying installations..."
+          
+          # Check if mineflayer is installed
+          if node -e "require('mineflayer')" 2>/dev/null; then
+            echo "✅ mineflayer installed"
+          else
+            echo "❌ mineflayer missing, installing..."
+            npm install mineflayer@latest
+          fi
+          
+          # Check if socks-proxy-agent is installed
+          if node -e "require('socks-proxy-agent')" 2>/dev/null; then
+            echo "✅ socks-proxy-agent installed"
+          else
+            echo "❌ socks-proxy-agent missing, installing..."
+            npm install socks-proxy-agent@latest
+          fi
+          
+          echo "✅ All dependencies verified"
+      
+      # ==================== CREATE BOT FILE ====================
+      - name: Create bot file
+        run: |
+          cat > bot.js << 'EOF'
+          const mineflayer = require('mineflayer');
+          const { SocksProxyAgent } = require('socks-proxy-agent');
+          
+          // ==================== PROXY CONFIGURATION ====================
+          const USE_PROXY = process.env.USE_PROXY === 'true';
+          
+          let agent = null;
+          
+          if (USE_PROXY) {
+              const PROXY_HOST = process.env.PROXY_HOST;
+              const PROXY_PORT = process.env.PROXY_PORT;
+              const PROXY_USER = process.env.PROXY_USER;
+              const PROXY_PASS = process.env.PROXY_PASS;
+              
+              if (PROXY_HOST && PROXY_PORT) {
+                  try {
+                      let proxyUrl;
+                      if (PROXY_USER && PROXY_PASS) {
+                          proxyUrl = `socks5://${PROXY_USER}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
+                      } else {
+                          proxyUrl = `socks5://${PROXY_HOST}:${PROXY_PORT}`;
+                      }
+                      agent = new SocksProxyAgent(proxyUrl);
+                      console.log('✅ Proxy configured:', `${PROXY_HOST}:${PROXY_PORT}`);
+                  } catch (err) {
+                      console.log('⚠️ Proxy error:', err.message);
+                  }
+              } else {
+                  console.log('⚠️ Proxy enabled but no proxy details found in secrets');
+              }
+          } else {
+              console.log('ℹ️ Proxy disabled, using direct connection');
           }
+          
+          // ==================== BOT CONFIG ====================
+          const BOT_CONFIG = {
+              host: 'Ultimis.net',
+              port: 25565,
+              username: 'kevin911',
+              version: '1.12.2',
+              auth: 'offline'
+          };
+          
+          if (agent) {
+              BOT_CONFIG.agent = agent;
+          }
+          
+          console.log('🚀 Starting Minecraft Bot...');
+          console.log('📡 Server:', BOT_CONFIG.host);
+          console.log('🤖 Bot:', BOT_CONFIG.username);
+          console.log('🔌 Connection:', agent ? 'Via Proxy' : 'Direct');
+          
+          const bot = mineflayer.createBot(BOT_CONFIG);
+          
+          let loginSent = false;
+          let startTime = Date.now();
+          
+          // ==================== EVENTS ====================
+          
+          bot.on('login', () => {
+              console.log('✅ Connected to server');
+          });
+          
+          bot.on('spawn', () => {
+              console.log('✅ Spawned in world');
+              
+              if (!loginSent) {
+                  loginSent = true;
+                  setTimeout(() => {
+                      console.log('🔑 Sending login...');
+                      bot.chat('/login asdfghjkl1');
+                  }, 2000);
+              }
+          });
+          
+          bot.on('message', (msg) => {
+              const text = msg.toString();
+              console.log('💬', text);
+              
+              const lowerText = text.toLowerCase();
+              
+              if (lowerText.includes('register') && lowerText.includes('password')) {
+                  console.log('📝 Registering...');
+                  bot.chat('/register asdfghjkl1 asdfghjkl1');
+              }
+              
+              if (lowerText.includes('login') && lowerText.includes('password')) {
+                  console.log('🔑 Logging in...');
+                  bot.chat('/login asdfghjkl1');
+              }
+              
+              if (lowerText.includes('successfully logged in')) {
+                  console.log('✅ Login successful! Bot is running.');
+                  console.log(`⏱️  Uptime: ${Math.floor((Date.now() - startTime) / 1000)} seconds`);
+              }
+              
+              if (lowerText.includes('vpn') || lowerText.includes('proxy')) {
+                  console.log('⚠️ Server detected proxy! This proxy may be blocked.');
+              }
+          });
+          
+          bot.on('kicked', (reason) => {
+              const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
+              console.log('❌ Kicked:', reasonText);
+              
+              if (reasonText.includes('VPN') || reasonText.includes('proxy')) {
+                  console.log('💡 Proxy detected. Try a different proxy from your list.');
+              }
+              
+              process.exit(1);
+          });
+          
+          bot.on('error', (err) => {
+              console.log('⚠️ Error:', err.message);
+          });
+          
+          bot.on('end', () => {
+              console.log('🔌 Connection ended');
+              process.exit(0);
+          });
+          
+          // Keep bot alive
+          setInterval(() => {
+              if (bot && bot.entity) {
+                  const uptime = Math.floor((Date.now() - startTime) / 1000);
+                  if (uptime % 60 === 0 && uptime > 0) {
+                      console.log(`💚 Bot alive for ${Math.floor(uptime / 60)} minutes`);
+                  }
+              }
+          }, 60000);
           EOF
-          echo "✅ Bot configuration created"
+          
+          echo "✅ bot.js created"
+      
+      # ==================== TEST PROXY (Optional) ====================
+      - name: Test proxy connection
+        if: github.event.inputs.use_proxy == 'true'
+        run: |
+          echo "🧪 Testing proxy connection..."
+          
+          node -e "
+          const { SocksProxyAgent } = require('socks-proxy-agent');
+          const https = require('https');
+          
+          const proxyUrl = 'socks5://${{ secrets.PROXY_USER }}:${{ secrets.PROXY_PASS }}@${{ secrets.PROXY_HOST }}:${{ secrets.PROXY_PORT }}';
+          const agent = new SocksProxyAgent(proxyUrl);
+          
+          const options = {
+              hostname: 'api.ipify.org',
+              port: 443,
+              path: '/',
+              method: 'GET',
+              agent: agent,
+              timeout: 10000
+          };
+          
+          const req = https.request(options, (res) => {
+              let data = '';
+              res.on('data', (chunk) => { data += chunk; });
+              res.on('end', () => {
+                  console.log('✅ Proxy working! IP:', data);
+              });
+          });
+          
+          req.on('error', (err) => {
+              console.log('❌ Proxy test failed:', err.message);
+              process.exit(1);
+          });
+          
+          req.end();
+          "
       
       # ==================== RUN BOT ====================
-      
-      - name: Run Minecraft Bot with stealth
+      - name: Run Minecraft Bot
         run: |
-          echo "🚀 Starting Minecraft Bot in stealth mode..."
+          echo "🚀 Starting bot..."
           echo "Current time: $(date)"
-          echo "Current timezone: $(date +%Z)"
-          echo "================================"
+          echo "================================="
           
-          # Add random startup delay to avoid pattern
-          DELAY=$((RANDOM % 5 + 2))
-          echo "⏱️  Starting in ${DELAY} seconds..."
-          sleep $DELAY
-          
-          # Run bot with additional environment variables
-          NODE_OPTIONS="--max-old-space-size=512" \
-          BOT_START_TIME=$(date +%s) \
-          RANDOM_SEED=$RANDOM \
-          node bot.js 2>&1 | tee bot-output.log
-          
-        continue-on-error: true
+          node bot.js
         env:
-          # Randomize bot behavior
-          BOT_MODE: "stealth"
-          HUMAN_TYPING_SPEED: "true"
-          RANDOM_DELAYS: "true"
+          USE_PROXY: ${{ github.event.inputs.use_proxy }}
+          PROXY_HOST: ${{ secrets.PROXY_HOST }}
+          PROXY_PORT: ${{ secrets.PROXY_PORT }}
+          PROXY_USER: ${{ secrets.PROXY_USER }}
+          PROXY_PASS: ${{ secrets.PROXY_PASS }}
+        continue-on-error: false
       
-      # ==================== MONITORING ====================
-      
-      - name: Monitor bot performance
+      # ==================== STATUS REPORT ====================
+      - name: Bot status
         if: always()
         run: |
-          echo "📊 Bot performance metrics:"
-          echo "================================"
+          echo ""
+          echo "================================="
+          echo "🏁 Bot execution completed"
+          echo "Finished at: $(date)"
+          echo "================================="
           
-          # Check if bot is still running
-          if pgrep -f "node bot.js" > /dev/null; then
-            echo "✅ Bot is running"
+          # Check exit code
+          if [ $? -eq 0 ]; then
+            echo "✅ Bot ran successfully"
           else
-            echo "⚠️ Bot has stopped"
-          fi
-          
-          # Network stats
-          echo ""
-          echo "🌐 Network statistics:"
-          netstat -an | grep -E "25565|ESTABLISHED" | head -5 || echo "   No active connections"
-          
-          # System load
-          echo ""
-          echo "💻 System load:"
-          uptime
-          
-          # Memory usage
-          echo ""
-          echo "🧠 Memory usage:"
-          free -h
-      
-      - name: Generate stealth report
-        if: always()
-        run: |
-          echo "🕵️ Stealth Report"
-          echo "================================"
-          echo "Bot started at: $(date -d @${BOT_START_TIME:-0} 2>/dev/null || echo "Unknown")"
-          echo "GitHub Runner IP: $(curl -s ifconfig.me || echo "Unknown")"
-          echo "Timezone: $(date +%Z)"
-          echo "================================"
-          
-          # Check for detection patterns
-          if [ -f bot-output.log ]; then
-            echo ""
-            echo "📋 Detection analysis:"
-            if grep -qi "antibot\|antibot\|detected\|flagged\|suspicious" bot-output.log; then
-              echo "⚠️ WARNING: Possible detection patterns found"
-              grep -i "antibot\|detected\|flagged" bot-output.log | head -5
-            else
-              echo "✅ No obvious detection patterns"
-            fi
+            echo "❌ Bot encountered an error"
           fi
       
-      # ==================== ARTIFACTS ====================
-      
+      # ==================== UPLOAD LOGS ====================
       - name: Upload logs
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: stealth-bot-logs
+          name: bot-error-logs
           path: |
             *.log
-            bot-output.log
-            logs/
-          if-no-files-found: ignore
           retention-days: 3
-      
-      - name: Upload network diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: network-diagnostics
-          path: |
-            /tmp/*.pcap
-            network-*.log
-          if-no-files-found: ignore
-          retention-days: 1
-      
-      - name: Cleanup
-        if: always()
-        run: |
-          echo "🧹 Cleaning up..."
-          # Kill any remaining node processes
-          pkill -f "node bot.js" || true
-          
-          # Clear sensitive data
-          rm -f bot-output.log 2>/dev/null || true
-          
-          echo "✅ Cleanup complete"
