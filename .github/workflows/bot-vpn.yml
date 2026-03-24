@@ -16,72 +16,27 @@ jobs:
         with:
           node-version: '18'
 
-      # ==================== تثبيت OpenVPN ====================
-      - name: Install OpenVPN
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y openvpn curl
-          echo "✅ OpenVPN installed"
-
-      # ==================== التحقق من ملف VPN ====================
-      - name: Check VPN config
-        run: |
-          if [ -f "vpn.ovpn" ]; then
-            echo "✅ VPN config found: vpn.ovpn"
-            echo "File size: $(wc -l < vpn.ovpn) lines"
-          else
-            echo "❌ vpn.ovpn not found!"
-            echo "Files in directory:"
-            ls -la
-            exit 1
-          fi
-
-      # ==================== تشغيل VPN ====================
-      - name: Start VPN
-        run: |
-          echo "🔄 Starting VPN..."
-          
-          # تشغيل VPN في الخلفية
-          sudo openvpn --config vpn.ovpn --daemon --log vpn.log --writepid vpn.pid
-          
-          # انتظر 10 ثواني
-          echo "⏳ Waiting 10 seconds for VPN connection..."
-          sleep 10
-          
-          # فحص الاتصال
-          echo "🔍 Checking connection..."
-          
-          # جرب نشوف الIP
-          IP=$(curl -s --max-time 5 https://api.ipify.org 2>/dev/null || echo "failed")
-          
-          if [ "$IP" != "failed" ]; then
-            echo "✅ VPN CONNECTED!"
-            echo "📡 Current IP: $IP"
-          else
-            echo "⚠️ Could not get IP, but continuing..."
-          fi
-          
-          echo "✅ VPN step completed"
-
-      # ==================== تثبيت dependencies ====================
       - name: Install dependencies
         run: |
-          echo "📦 Installing mineflayer..."
+          sudo apt-get update
+          sudo apt-get install -y openvpn
           npm install mineflayer
-          echo "✅ Dependencies installed"
+          echo "✅ Ready"
 
-      # ==================== تشغيل البوت ====================
-      - name: Run Bot
+      - name: Run Bot with VPN
         run: |
+          # تشغيل VPN في الخلفية
+          sudo openvpn --config vpn.ovpn --daemon --log vpn.log &
+          
+          # انتظر 10 ثواني
+          echo "⏳ Waiting for VPN..."
+          sleep 10
+          
+          # تشغيل البوت
           echo "🚀 Starting bot..."
-          echo "Current IP: $(curl -s https://api.ipify.org)"
-          echo "================================"
           node bot.js
         timeout-minutes: 360
 
-      # ==================== تنظيف ====================
       - name: Cleanup
         if: always()
-        run: |
-          sudo killall openvpn 2>/dev/null || true
-          echo "✅ Cleanup done"
+        run: sudo killall openvpn || true
