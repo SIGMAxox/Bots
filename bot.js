@@ -1,135 +1,132 @@
 const mineflayer = require('mineflayer');
-const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ==================== PROXY ====================
-const PROXY = {
-    host: '31.58.9.4',
-    port: 6077,
-    user: 'jjaczqrq',
-    pass: 'jajcwxcjzxa7'
+// ==================== VPN CONFIGURATION ====================
+// ضع ملف الـ .ovpn في نفس المجلد واسمه "vpn.ovpn"
+// أو غيّر المسار هنا
+const VPN_CONFIG_FILE = './vpn.ovpn';
+
+// ==================== BOT CONFIGURATION ====================
+const BOT_CONFIG = {
+    host: 'Ultimis.net',
+    port: 25565,
+    username: 'kevin911',
+    password: 'asdfghjkl1',
+    version: '1.12.2',
+    auth: 'offline',
+    
+    // Performance settings
+    hideErrors: true,
+    viewDistance: 'tiny',
+    checkTimeoutInterval: 60000
 };
 
-const proxyUrl = `socks5://${PROXY.user}:${PROXY.pass}@${PROXY.host}:${PROXY.port}`;
-const agent = new SocksProxyAgent(proxyUrl);
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const randomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-console.log('✅ Proxy ready:', PROXY.host + ':' + PROXY.port);
-
-// ==================== إعدادات البوت ====================
 let bot = null;
-let loginAttempts = 0;
-let reconnectInterval = null;
-let loginInterval = null;
+let isAuthenticated = false;
 
-function createBot() {
+// ==================== BOT FUNCTIONS ====================
+async function createBot() {
     if (bot) {
         try {
             bot.end();
         } catch(e) {}
     }
 
-    bot = mineflayer.createBot({
-        host: 'Ultimis.net',
-        port: 25565,
-        username: 'kevin911',
-        version: '1.12.2',
-        auth: 'offline',
-        agent: agent
+    console.log('🔗 Connecting to server...');
+    
+    bot = mineflayer.createBot(BOT_CONFIG);
+    
+    bot.once('login', async () => {
+        console.log('✅ Connected!');
+        await wait(randomDelay(2000, 4000));
     });
-
-    let loginSent = false;
-    let authenticated = false;
-
-    // ==================== الأحداث ====================
-
-    bot.on('login', () => {
-        console.log('✅ Connected to server');
-    });
-
-    bot.on('spawn', () => {
+    
+    bot.once('spawn', async () => {
         console.log('✅ Spawned in world');
+        
+        // Natural movement
+        await wait(randomDelay(1500, 3000));
+        
+        if (bot.entity) {
+            try {
+                bot.look(bot.entity.yaw + 0.5, 0, false);
+                await wait(500);
+                bot.setControlState('forward', true);
+                await wait(400);
+                bot.setControlState('forward', false);
+            } catch(e) {}
+        }
     });
-
-    bot.on('message', (msg) => {
+    
+    bot.on('message', async (msg) => {
         const text = msg.toString();
-        console.log('💬', text);
         
-        // لو لقى الرسالة دي بالحرف
-        if (text.includes('Please login to this account to play') && !loginSent) {
-            console.log('🔑 Detected login request! Sending password...');
-            bot.chat('/login asdfghjkl1');
-            loginSent = true;
+        // Show only important messages
+        if (!text.includes('VOTE') && !text.includes('Discord') && text.trim()) {
+            console.log('💬', text.substring(0, 120));
         }
         
-        // لو طلب تسجيل جديد
-        if (text.includes('register') && text.includes('password') && !loginSent) {
+        // Login
+        if (text.includes('Please login') && text.includes('password')) {
+            await wait(randomDelay(1000, 2500));
+            console.log('🔐 Logging in...');
+            bot.chat(`/login ${BOT_CONFIG.password}`);
+        }
+        
+        // Register
+        if (text.includes('register') && text.includes('password') && !isAuthenticated) {
+            await wait(randomDelay(1500, 3000));
             console.log('📝 Registering...');
-            bot.chat('/register asdfghjkl1 asdfghjkl1');
-            loginSent = true;
+            bot.chat(`/register ${BOT_CONFIG.password} ${BOT_CONFIG.password}`);
         }
         
-        // لو دخلنا بنجاح
+        // Success
         if (text.includes('Successfully logged in')) {
-            authenticated = true;
-            loginSent = true;
-            loginAttempts = 0;
-            console.log('✅ Bot is running!');
-            
-            // لو دخلنا بنجاح، نوقف المحاولات
-            if (loginInterval) {
-                clearInterval(loginInterval);
-                loginInterval = null;
-            }
-        }
-        
-        // لو فشل الدخول
-        if (text.includes('Wrong password') || text.includes('Incorrect password')) {
-            console.log('❌ Wrong password, trying again in 5 seconds...');
-            loginSent = false;
+            isAuthenticated = true;
+            console.log('✅ Bot is ready!');
         }
     });
-
+    
     bot.on('kicked', (reason) => {
-        const reasonText = typeof reason === 'string' ? reason : JSON.stringify(reason);
-        console.log('❌ Kicked:', reasonText);
+        const text = typeof reason === 'string' ? reason : JSON.stringify(reason);
+        console.log('❌ Kicked:', text.substring(0, 100));
         
-        // لو اتطرد بسبب الوقت، نعيد المحاولة
-        if (reasonText.includes('Authorization time is up')) {
-            console.log('⏰ Auth timeout, retrying in 5 seconds...');
-            loginSent = false;
+        if (text.includes('SECURITY') || text.includes('VPN')) {
+            console.log('🚨 VPN/Security block detected!');
+            console.log('💡 Try a different VPN server or config');
+            process.exit(1);
         }
         
-        // لو اتطرد لأي سبب، نعيد الاتصال
         setTimeout(() => {
-            console.log('🔄 Reconnecting...');
+            console.log('🔄 Reconnecting in 10s...');
             createBot();
-        }, 5000);
+        }, 10000);
     });
-
+    
     bot.on('error', (err) => {
-        console.log('⚠️ Error:', err.message);
+        if (err.code !== 'ETIMEDOUT') {
+            console.log('⚠️', err.message);
+        }
     });
-
+    
     bot.on('end', () => {
         console.log('🔌 Connection ended');
     });
 }
 
-// ==================== محاولة كل 5 ثواني ====================
-function startLoginLoop() {
-    loginInterval = setInterval(() => {
-        if (bot && bot.entity && !bot.authenticated) {
-            console.log(`🔐 Attempt ${loginAttempts + 1} - Sending login...`);
-            bot.chat('/login asdfghjkl1');
-            loginAttempts++;
-        }
-    }, 5000);
-}
-
-// ==================== بدء البوت ====================
-console.log('🚀 Starting bot...');
-console.log('📡 Server: Ultimis.net');
-console.log('🤖 Username: kevin911');
-console.log('🔄 Will keep trying every 5 seconds until successful');
+// ==================== START ====================
+console.log('═'.repeat(60));
+console.log('🚀 MINECRAFT BOT - VPN VERSION');
+console.log('═'.repeat(60));
+console.log('📡 Server:', BOT_CONFIG.host);
+console.log('🤖 Username:', BOT_CONFIG.username);
+console.log('🔒 VPN: Will use system VPN connection');
+console.log('═'.repeat(60));
+console.log('');
+console.log('⚠️  IMPORTANT: Make sure VPN is connected BEFORE running this!');
+console.log('   On GitHub Actions, VPN must be set up in workflow first.');
+console.log('');
 
 createBot();
-startLoginLoop();
