@@ -2,8 +2,6 @@ name: Minecraft Bot with VPN
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   run-bot:
@@ -11,10 +9,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
@@ -26,54 +24,59 @@ jobs:
           echo "✅ OpenVPN installed"
 
       - name: Setup VPN config
-        env:
-          VPN_CONFIG: ${{ secrets.VPN_CONFIG }}
-          VPN_USERNAME: ${{ secrets.VPN_USERNAME }}
-          VPN_PASSWORD: ${{ secrets.VPN_PASSWORD }}
         run: |
-          # Create VPN config file from secret
-          echo "$VPN_CONFIG" > vpn.ovpn
-          
-          # Create auth file if username/password provided
-          if [ ! -z "$VPN_USERNAME" ] && [ ! -z "$VPN_PASSWORD" ]; then
-            echo "$VPN_USERNAME" > vpn-auth.txt
-            echo "$VPN_PASSWORD" >> vpn-auth.txt
-            echo "auth-user-pass vpn-auth.txt" >> vpn.ovpn
+          # نسخ ملف الـ VPN من الريبو
+          if [ -f "mx-free-1.protonvpn.tcp.ovpn" ]; then
+            cp mx-free-1.protonvpn.tcp.ovpn vpn.ovpn
+            echo "✅ VPN config file found"
+          else
+            echo "❌ VPN config file not found!"
+            exit 1
           fi
           
-          echo "✅ VPN config ready"
+          # إضافة auth file لو في username/password في secrets
+          if [ ! -z "${{ secrets.VPN_USERNAME }}" ] && [ ! -z "${{ secrets.VPN_PASSWORD }}" ]; then
+            echo "${{ secrets.VPN_USERNAME }}" > vpn-auth.txt
+            echo "${{ secrets.VPN_PASSWORD }}" >> vpn-auth.txt
+            echo "auth-user-pass vpn-auth.txt" >> vpn.ovpn
+            echo "✅ Auth file created"
+          fi
 
       - name: Connect to VPN
         run: |
-          # Start OpenVPN in background
-          sudo openvpn --config vpn.ovpn --daemon
+          # تشغيل OpenVPN في الخلفية
+          sudo openvpn --config vpn.ovpn --daemon --log vpn.log
           
-          echo "⏳ Waiting for VPN connection..."
-          sleep 15
+          echo "⏳ Waiting for VPN connection (20 seconds)..."
+          sleep 20
           
-          # Check connection
+          # فحص الاتصال
           if ip addr show tun0 &> /dev/null; then
+            VPN_IP=$(curl -s --max-time 5 https://api.ipify.org || echo "Unknown")
             echo "✅ VPN connected!"
-            echo "📡 VPN IP:"
-            curl -s https://api.ipify.org
-            echo ""
+            echo "📡 VPN IP: $VPN_IP"
           else
             echo "❌ VPN connection failed!"
+            echo "Last 20 lines of VPN log:"
+            tail -20 vpn.log
             exit 1
           fi
 
       # ==================== BOT SETUP ====================
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install mineflayer
+          echo "✅ Dependencies installed"
 
       - name: Run Bot
         run: |
           echo "🚀 Starting bot through VPN..."
-          node bot-simple.js
+          echo "Current IP: $(curl -s https://api.ipify.org)"
+          node bot.js
         timeout-minutes: 360
 
       - name: Cleanup
         if: always()
         run: |
           sudo killall openvpn || true
-          echo "✅ Cleaned up"
+          echo "✅ Cleanup done"
