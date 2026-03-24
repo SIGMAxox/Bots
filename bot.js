@@ -1,5 +1,4 @@
 const mineflayer = require('mineflayer');
-const pkg = require('./package.json');
 
 // ==================== CONFIGURATION ====================
 const BOT_CONFIGS = [
@@ -10,23 +9,23 @@ const BOT_CONFIGS = [
     { username: 'notsigmaboylol', password: 'asdfghjkl1', showConsole: false }
 ];
 
+// Helper function for random array element
+function randomFromArray(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
 // Fake client data to mimic real Minecraft client
 const FAKE_CLIENT_DATA = {
     // Randomize brand info
-    brand: ['vanilla', 'fabric', 'forge', 'lunarclient', 'badlion'].random(),
+    brand: randomFromArray(['vanilla', 'fabric', 'forge', 'lunarclient', 'badlion']),
     // Random view distance (3-12 like real players)
     viewDistance: Math.floor(Math.random() * 9) + 3,
     // Random language
-    language: ['en_US', 'en_GB', 'fr_FR', 'de_DE', 'es_ES'].random(),
+    language: randomFromArray(['en_US', 'en_GB', 'fr_FR', 'de_DE', 'es_ES']),
     // Random render distance
     renderDistance: Math.floor(Math.random() * 10) + 5,
     // Random skin variant
     skinVariant: Math.floor(Math.random() * 4),
-};
-
-// Array random helper
-Array.prototype.random = function() {
-    return this[Math.floor(Math.random() * this.length)];
 };
 
 const SERVER_CONFIG = {
@@ -583,14 +582,14 @@ function removeBotAndRetry(bot, config, index) {
         const retryDelay = randomDelay(RETRY_DELAY - 10000, RETRY_DELAY + 10000);
         
         if (bot.showConsole && shouldShowMessage(bot.username, 'retry')) {
-            console.log(`🔄 [${config.username}] Retry ${botRetryCounts[config.username]}/${MAX_RETRIES} in ${Math.round(retryDelay/1000)}s`);
+            console.log(`🔄 [${bot.username}] Retry ${botRetryCounts[config.username]}/${MAX_RETRIES} in ${Math.round(retryDelay/1000)}s`);
         }
         
         setTimeout(() => {
             createBot(config, index);
         }, retryDelay);
     } else if (bot.showConsole) {
-        console.log(`💀 [${config.username}] Max retries reached`);
+        console.log(`💀 [${bot.username}] Max retries reached`);
     }
 }
 
