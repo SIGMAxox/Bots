@@ -1,33 +1,30 @@
 const mineflayer = require('mineflayer');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
-// ==================== PROXY (من Webshare) ====================
+// ==================== PROXY - جرب بروكسي مختلف ====================
+// جرب الأرقام دي واحد واحد من القائمة اللي عندك
 const PROXY = {
-    host: '31.58.9.4',
-    port: 6077,
+    host: '31.58.9.4',   // جرب 31.58.9.5 او 31.58.9.6
+    port: 6077,           // ممكن البورت يختلف
     user: 'jjaczqrq',
     pass: 'jajcwxcjzxa7'
 };
 
-// عمل proxy agent
 const proxyUrl = `socks5://${PROXY.user}:${PROXY.pass}@${PROXY.host}:${PROXY.port}`;
 const agent = new SocksProxyAgent(proxyUrl);
 
 console.log('✅ Proxy ready:', PROXY.host + ':' + PROXY.port);
 
-// ==================== اعدادات البوت ====================
 const bot = mineflayer.createBot({
     host: 'Ultimis.net',
     port: 25565,
     username: 'kevin911',
-    version: '1.12.2',
+    version: '1.21.1',
     auth: 'offline',
-    agent: agent  // الاتصال عن طريق proxy
+    agent: agent
 });
 
 let loginSent = false;
-
-// ==================== الاحداث ====================
 
 bot.on('login', () => {
     console.log('✅ Connected to server');
@@ -38,10 +35,9 @@ bot.on('spawn', () => {
     
     if (!loginSent) {
         loginSent = true;
-        setTimeout(() => {
-            console.log('🔑 Logging in...');
-            bot.chat('/login asdfghjkl1');
-        }, 2000);
+        // نرسل كلمة السر فوراً بدون تأخير
+        console.log('🔑 Logging in...');
+        bot.chat('/login asdfghjkl1');
     }
 });
 
@@ -67,5 +63,3 @@ bot.on('error', (err) => {
 });
 
 console.log('🚀 Starting bot...');
-console.log('📡 Server: Ultimis.net');
-console.log('🤖 Username: kevin911');
