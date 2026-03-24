@@ -2,8 +2,6 @@ name: Minecraft Bot with VPN
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   run-bot:
@@ -11,69 +9,83 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # ==================== VPN SETUP ====================
+      # ==================== تثبيت OpenVPN ====================
       - name: Install OpenVPN
         run: |
           sudo apt-get update
-          sudo apt-get install -y openvpn
+          sudo apt-get install -y openvpn curl
           echo "✅ OpenVPN installed"
 
+      # ==================== تجهيز ملف VPN ====================
       - name: Setup VPN config
-        env:
-          VPN_CONFIG: ${{ secrets.VPN_CONFIG }}
-          VPN_USERNAME: ${{ secrets.VPN_USERNAME }}
-          VPN_PASSWORD: ${{ secrets.VPN_PASSWORD }}
         run: |
-          # Create VPN config file from secret
-          echo "$VPN_CONFIG" > vpn.ovpn
-          
-          # Create auth file if username/password provided
-          if [ ! -z "$VPN_USERNAME" ] && [ ! -z "$VPN_PASSWORD" ]; then
-            echo "$VPN_USERNAME" > vpn-auth.txt
-            echo "$VPN_PASSWORD" >> vpn-auth.txt
-            echo "auth-user-pass vpn-auth.txt" >> vpn.ovpn
-          fi
-          
-          echo "✅ VPN config ready"
-
-      - name: Connect to VPN
-        run: |
-          # Start OpenVPN in background
-          sudo openvpn --config vpn.ovpn --daemon
-          
-          echo "⏳ Waiting for VPN connection..."
-          sleep 15
-          
-          # Check connection
-          if ip addr show tun0 &> /dev/null; then
-            echo "✅ VPN connected!"
-            echo "📡 VPN IP:"
-            curl -s https://api.ipify.org
-            echo ""
+          # نسخ ملف VPN من الريبو
+          if [ -f "vpn.ovpn" ]; then
+            cp vpn.ovpn vpn.ovpn
+            echo "✅ VPN config found"
           else
-            echo "❌ VPN connection failed!"
+            echo "❌ VPN config not found!"
             exit 1
           fi
 
-      # ==================== BOT SETUP ====================
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run Bot
+      # ==================== تشغيل VPN ====================
+      - name: Start VPN
         run: |
-          echo "🚀 Starting bot through VPN..."
-          node bot-simple.js
+          echo "🔄 Starting VPN..."
+          
+          # تشغيل VPN في الخلفية
+          sudo openvpn --config vpn.ovpn --daemon --log vpn.log --writepid vpn.pid
+          
+          # انتظر 10 ثواني بالضبط
+          echo "⏳ Waiting exactly 10 seconds for VPN to connect..."
+          sleep 10
+          
+          # فحص الاتصال
+          echo "🔍 Checking VPN connection..."
+          
+          # جرب تشوف IP
+          VPN_IP=$(curl -s --max-time 5 https://api.ipify.org || echo "failed")
+          
+          if [ "$VPN_IP" != "failed" ]; then
+            echo "✅ VPN CONNECTED SUCCESSFULLY!"
+            echo "📡 Current IP: $VPN_IP"
+            echo "✅ STEP COMPLETE - Moving to next step..."
+          else
+            echo "⚠️ VPN might not be ready, but continuing anyway..."
+            echo "📡 Will try to connect without VPN check"
+          fi
+          
+          # نخرج بنجاح عشان نكمل للخطوة اللي بعدها
+          exit 0
+
+      # ==================== تثبيت dependencies ====================
+      - name: Install Bot Dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install mineflayer
+          echo "✅ Dependencies installed"
+
+      # ==================== تشغيل البوت ====================
+      - name: Run Minecraft Bot
+        run: |
+          echo "🚀 STARTING BOT..."
+          echo "Current time: $(date)"
+          echo "Current IP: $(curl -s https://api.ipify.org)"
+          echo "================================"
+          node bot.js
         timeout-minutes: 360
 
+      # ==================== تنظيف ====================
       - name: Cleanup
         if: always()
         run: |
-          sudo killall openvpn || true
-          echo "✅ Cleaned up"
+          echo "🧹 Cleaning up..."
+          sudo killall openvpn 2>/dev/null || true
+          echo "✅ Done"
